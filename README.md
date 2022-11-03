@@ -27,5 +27,5 @@ Enabling `defaultMaxAge` across your GraphQL implementation might partially solv
 
 ## Authors
 
-* [taylrun](https://github.com/taylrun) - *Initial idea and work* - 
-* [Yunoo](https://github.com/Yunoo) - *Lib re-write and development* - 
+* [taylrun](https://github.com/taylrun) - *Initial idea and work*
+* [Yunoo](https://github.com/Yunoo) - *Lib re-write and development*

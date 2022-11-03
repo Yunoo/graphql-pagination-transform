@@ -13,8 +13,11 @@
     "version": "git add -A src",
     "postversion": "git push && git push --tags"
   },
-  "repository": "git@github.com:Yunoo/graphql-pagination-transform.git",
-  "license": "GPL-3.0",
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/Yunoo/graphql-pagination-transform.git"
+  },
+  "license": "MIT",
   "engines": {
     "node": "^14.17.0 || >= 16.13.0"
   },
@@ -48,5 +51,13 @@
     "hooks": {
       "pre-commit": "lint-staged"
     }
-  }
+  },
+  "bugs": {
+    "url": "https://github.com/Yunoo/graphql-pagination-transform/issues"
+  },
+  "homepage": "https://github.com/Yunoo/graphql-pagination-transform#readme",
+  "directories": {
+    "lib": "lib"
+  },
+  "author": "Anatoli Fridlund Belski <Yunoo@users.noreply.github.com>"
 }
