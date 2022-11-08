@@ -5,10 +5,12 @@ Transforms GraphQL schema fields into a [relay connections](https://relay.dev/gr
 ---
 
 ## Features
+
 * Create the needed Connection and Edge object types.
 * Reassign the type of marked fields to the Connection type.
 * Remove any `@connection` directives.
 * Generate the PageInfo object type if it hasn't been defined.
+* Support non-nullable types
 * Throw errors if the generated Connection and Edge types have a name conflict with types already defined in your SDL.
 * Leave everything else in your SDL untouched.
 * Apply cacheControl directives to Connection and Edge types if exist.
