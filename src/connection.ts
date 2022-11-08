@@ -20,7 +20,9 @@ export const Edge = (typeName: string, args: any) => {
   return `
   type ${typeName}Edge {
     cursor: String!
-    node: ${typeName} ${cacheControl}
+    node: ${typeName.replace('NonNull', '')}${
+    args?.NonNull === true ? '!' : ''
+  } ${cacheControl}
   }
 `
 }
@@ -36,7 +38,7 @@ export const Connection = (typeName: string, args: any) => {
 }
 
 const composeCacheContolDirective = (args: any) => {
-  if (args === undefined) return '@cacheControl(inheritMaxAge: true)'
+  if (args?.useApolloInheritMaxAge) return '@cacheControl(inheritMaxAge: true)'
   if (args?.hasOwnProperty('maxAge'))
     return `@cacheControl(maxAge: ${args.maxAge})`
   return ''
@@ -57,7 +59,7 @@ export default (
   const objectTypes: IFoundObjectTypes = {}
   const useCacheControl =
     cacheControlOptions?.enable ?? Boolean(cacheControlOptions)
-  const useApolloInheritMaxAge = cacheControlOptions?.apollo
+  const useApolloInheritMaxAge = !!cacheControlOptions?.apollo
   return {
     connectionObjects: () => objectTypes,
     connectionDirectiveTypeDefs: getConnectionDirectiveTypeDefs(name),
@@ -66,7 +68,11 @@ export default (
         const directives = getDirectives(schema, fieldConfig)
         if (!directives?.length) return fieldConfig
         const type = fieldConfig.astNode?.type
-        const typeName: string = type?.name?.value || type?.type?.name?.value
+        const args = { NonNull: type.kind === 'NonNullType' }
+        const typeName = `${type?.name?.value || type?.type?.name?.value}${
+          args.NonNull ? 'NonNull' : ''
+        }`
+
         if (!typeName) return fieldConfig
 
         const connectionDirective = directives.find(
@@ -76,7 +82,15 @@ export default (
         if (!connectionDirective) return fieldConfig
         if (!useCacheControl) {
           // Skip cacheContol directives
-          if (!objectTypes.hasOwnProperty(typeName)) objectTypes[typeName] = {}
+          if (!objectTypes.hasOwnProperty(typeName))
+            objectTypes[typeName] = args
+          return fieldConfig
+        }
+
+        if (useApolloInheritMaxAge) {
+          // Rely on inheritMaxAge instead of calculating maxAge (Apollo v3+)
+          if (!objectTypes.hasOwnProperty(typeName))
+            objectTypes[typeName] = { ...args, useApolloInheritMaxAge }
           return fieldConfig
         }
 
@@ -84,18 +98,15 @@ export default (
           (value) => value.name === 'cacheControl'
         )
 
-        if (useApolloInheritMaxAge) {
-          // Rely on inheritMaxAge instead of calculating maxAge (Apollo v3+)
-          if (!objectTypes.hasOwnProperty(typeName))
-            objectTypes[typeName] = undefined
-          return fieldConfig
-        }
-
         // Fallback to legacy cacheControl calculation (when inheritMaxAge is not supported)
-        const args = cacheControlDirective?.args || {}
-        if (!objectTypes.hasOwnProperty(typeName)) objectTypes[typeName] = args
-        else if (args?.maxAge > objectTypes[typeName]?.maxAge)
-          objectTypes[typeName].maxAge = args.maxAge
+        const cacheControlArgs = cacheControlDirective?.args || {}
+        if (!objectTypes.hasOwnProperty(typeName))
+          objectTypes[typeName] = {
+            ...args,
+            ...cacheControlArgs,
+          }
+        else if (cacheControlArgs?.maxAge > objectTypes[typeName]?.maxAge)
+          objectTypes[typeName].maxAge = cacheControlArgs.maxAge
 
         return fieldConfig
       }

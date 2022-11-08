@@ -168,8 +168,9 @@ export default ({
 
     if (!connectionDirectiveType) return fieldConfig
 
-    const targetType = schema.getType(`${fieldConfig.type}Connection`)
-    if (!targetType) return fieldConfig
+    const typeName = fieldConfig.type?.toString()?.replace('!', 'NonNull')
+    const targetType = schema.getType(`${typeName}Connection`)
+    if (!typeName || !targetType) return fieldConfig
     fieldConfig.type = targetType
     fieldConfig.astNode.type = targetType.astNode
 
