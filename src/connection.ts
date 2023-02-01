@@ -1,9 +1,10 @@
-import { GraphQLSchema } from 'graphql'
+import { GraphQLSchema, valueFromAST } from 'graphql'
 import {
   mapSchema,
   getDirective,
   getDirectives,
   MapperKind,
+  DirectiveAnnotation,
 } from '@graphql-tools/utils'
 import { ICacheControlOptions, IFoundObjectTypes } from './interfaces'
 
@@ -44,10 +45,42 @@ const composeCacheContolDirective = (args: any) => {
   return ''
 }
 
+const parseExtract = (
+  typeName: string,
+  objectTypes: IFoundObjectTypes,
+  connectionDirective: DirectiveAnnotation
+): void => {
+  if (!objectTypes.hasOwnProperty(typeName)) return
+  const type = objectTypes[typeName]
+  const currentEdgeInterfaceName = (type.edgeInterface as string)?.trim()
+  const directiveEdgeInterfaceName = (
+    connectionDirective.args?.edgeInterface as string
+  )?.trim()
+
+  if (
+    type.edgeInterface &&
+    connectionDirective.args?.edgeInterface &&
+    currentEdgeInterfaceName !== directiveEdgeInterfaceName
+  )
+    throw new Error(
+      `A connection of the same node type ${typeName} cannot be edgeInterfaceed using different interfaces of "${currentEdgeInterfaceName}" and "${directiveEdgeInterfaceName}"`
+    )
+
+  if (
+    (!currentEdgeInterfaceName && directiveEdgeInterfaceName) ||
+    (currentEdgeInterfaceName && !directiveEdgeInterfaceName)
+  )
+    throw new Error(
+      'An interface name should be explicitly written in all connections of the same type'
+    )
+}
+
 export const getConnectionDirectiveTypeDefs = (
   directiveName: string
 ): string => {
-  return `directive @${directiveName || 'connection'} on FIELD_DEFINITION`
+  return `directive @${
+    directiveName || 'connection'
+  }(edgeInterface: String) on FIELD_DEFINITION`
 }
 
 // Find connection directives
@@ -82,15 +115,23 @@ export default (
         if (!connectionDirective) return fieldConfig
         if (!useCacheControl) {
           // Skip cacheContol directives
-          if (!objectTypes.hasOwnProperty(typeName))
-            objectTypes[typeName] = args
+
+          parseExtract(typeName, objectTypes, connectionDirective)
+          objectTypes[typeName] = { ...args, ...connectionDirective.args }
+
           return fieldConfig
         }
 
         if (useApolloInheritMaxAge) {
           // Rely on inheritMaxAge instead of calculating maxAge (Apollo v3+)
-          if (!objectTypes.hasOwnProperty(typeName))
-            objectTypes[typeName] = { ...args, useApolloInheritMaxAge }
+
+          parseExtract(typeName, objectTypes, connectionDirective)
+          objectTypes[typeName] = {
+            ...args,
+            ...connectionDirective.args,
+            useApolloInheritMaxAge,
+          }
+
           return fieldConfig
         }
 
@@ -99,15 +140,17 @@ export default (
         )
 
         // Fallback to legacy cacheControl calculation (when inheritMaxAge is not supported)
+        parseExtract(typeName, objectTypes, connectionDirective)
         const cacheControlArgs = cacheControlDirective?.args || {}
-        if (!objectTypes.hasOwnProperty(typeName))
-          objectTypes[typeName] = {
-            ...args,
-            ...cacheControlArgs,
-          }
-        else if (cacheControlArgs?.maxAge > objectTypes[typeName]?.maxAge)
-          objectTypes[typeName].maxAge = cacheControlArgs.maxAge
-
+        objectTypes[typeName] = {
+          ...args,
+          ...connectionDirective.args,
+          ...cacheControlArgs,
+          maxAge:
+            cacheControlArgs?.maxAge > objectTypes[typeName]?.maxAge
+              ? cacheControlArgs.maxAge
+              : objectTypes[typeName]?.maxAge,
+        }
         return fieldConfig
       }
       return mapSchema(schema, {
