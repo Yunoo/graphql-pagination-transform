@@ -14,3 +14,8 @@ export interface IGetSchemaDirectivesInput {
   overrideDirectiveName?: string
   cacheControl?: ICacheControlOptions
 }
+
+export interface IEdgeInterfaceFields {
+  header: string
+  fields: string
+}

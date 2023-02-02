@@ -18,12 +18,14 @@ export const PageInfo = `
 
 export const Edge = (typeName: string, args: any) => {
   const cacheControl = composeCacheContolDirective(args)
+  const { edgeInterface, header, fields }: any = args
   return `
-  type ${typeName}Edge {
+  type ${typeName}Edge ${!!edgeInterface ? header : ''} {
     cursor: String!
     node: ${typeName.replace('NonNull', '')}${
     args?.NonNull === true ? '!' : ''
   } ${cacheControl}
+    ${!!edgeInterface ? fields : ''}
   }
 `
 }
@@ -45,7 +47,7 @@ const composeCacheContolDirective = (args: any) => {
   return ''
 }
 
-const parseExtract = (
+const checkEdgeInterfaceArgs = (
   typeName: string,
   objectTypes: IFoundObjectTypes,
   connectionDirective: DirectiveAnnotation
@@ -116,7 +118,7 @@ export default (
         if (!useCacheControl) {
           // Skip cacheContol directives
 
-          parseExtract(typeName, objectTypes, connectionDirective)
+          checkEdgeInterfaceArgs(typeName, objectTypes, connectionDirective)
           objectTypes[typeName] = { ...args, ...connectionDirective.args }
 
           return fieldConfig
@@ -125,7 +127,7 @@ export default (
         if (useApolloInheritMaxAge) {
           // Rely on inheritMaxAge instead of calculating maxAge (Apollo v3+)
 
-          parseExtract(typeName, objectTypes, connectionDirective)
+          checkEdgeInterfaceArgs(typeName, objectTypes, connectionDirective)
           objectTypes[typeName] = {
             ...args,
             ...connectionDirective.args,
@@ -140,7 +142,7 @@ export default (
         )
 
         // Fallback to legacy cacheControl calculation (when inheritMaxAge is not supported)
-        parseExtract(typeName, objectTypes, connectionDirective)
+        checkEdgeInterfaceArgs(typeName, objectTypes, connectionDirective)
         const cacheControlArgs = cacheControlDirective?.args || {}
         objectTypes[typeName] = {
           ...args,
