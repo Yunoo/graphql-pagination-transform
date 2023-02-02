@@ -5,6 +5,7 @@ import {
   Kind,
   DocumentNode,
   GraphQLSchema,
+  printType,
 } from 'graphql'
 import {
   mapSchema,
@@ -17,10 +18,36 @@ import { mergeTypeDefs } from '@graphql-tools/merge'
 
 import connectionDirective, { Connection, Edge, PageInfo } from './connection'
 
-import { IFoundObjectTypes, IGetSchemaDirectivesInput } from './interfaces'
+import {
+  IFoundObjectTypes,
+  IGetSchemaDirectivesInput,
+  IEdgeInterfaceFields,
+} from './interfaces'
+
+const parseInterfaceFields = (
+  name: string,
+  schema: GraphQLSchema
+): IEdgeInterfaceFields | undefined => {
+  if (!name) return undefined
+  const interfaceType = schema.getType(name)
+  if (!interfaceType) return undefined
+  const interfaceTypeSDL: string = printType(interfaceType)
+  const fields = interfaceTypeSDL
+    .match(/{[^}]*}/g)?.[0]
+    ?.replace(/{|}/g, '')
+    ?.split('\n')
+    .filter(Boolean)
+    .map((e) => e.trim())
+    ?.join('\n  ')
+
+  if (!fields) return undefined
+
+  return { header: `implements ${name}`, fields }
+}
 
 export const createConnectionTypes = (
-  objectTypes: IFoundObjectTypes
+  objectTypes: IFoundObjectTypes,
+  schema: GraphQLSchema
 ): string[] => {
   return [
     !objectTypes.hasOwnProperty('PageInfo') ? PageInfo : undefined,
@@ -29,7 +56,14 @@ export const createConnectionTypes = (
         throw new Error(`${typeName}Edge already exists.`)
       if (!!objectTypes.hasOwnProperty(`${typeName}Connection`))
         throw new Error(`${typeName}Connection already exists.`)
-      return [...acc, Edge(typeName, args), Connection(typeName, args)]
+      return [
+        ...acc,
+        Edge(typeName, {
+          ...args,
+          ...(parseInterfaceFields(args.edgeInterface, schema) || {}),
+        }),
+        Connection(typeName, args),
+      ]
     }, []),
   ].filter((node): node is string => !!node)
 }
@@ -150,11 +184,15 @@ export default ({
     connectionDirectiveTransformer,
   } = connectionDirective(directiveName, cacheControl)
 
+  const initialSchema = schemaBuilder(typeDefs)
   // Run transformer to get all types with connection directives
-  connectionDirectiveTransformer(schemaBuilder(typeDefs))
+  connectionDirectiveTransformer(initialSchema)
 
   const objectTypeList = connectionObjects()
-  const connectionTypeDefs = createConnectionTypes(objectTypeList)
+  const connectionTypeDefs = createConnectionTypes(
+    objectTypeList,
+    initialSchema
+  )
   const schema = schemaBuilder(
     mergeTypeDefs([typeDefs, connectionTypeDefs, connectionDirectiveTypeDefs])
   )
