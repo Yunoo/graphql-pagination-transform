@@ -16,7 +16,12 @@ import {
 import { makeExecutableSchema } from '@graphql-tools/schema'
 import { mergeTypeDefs } from '@graphql-tools/merge'
 
-import connectionDirective, { Connection, Edge, PageInfo } from './connection'
+import connectionDirective, {
+  Connection,
+  Edge,
+  EdgeUnion,
+  PageInfo,
+} from './connection'
 
 import {
   IFoundObjectTypes,
@@ -25,11 +30,12 @@ import {
 } from './interfaces'
 
 const parseInterfaceFields = (
-  name: string,
+  typeName: string,
+  interfaceName: string,
   schema: GraphQLSchema
 ): IEdgeInterfaceFields | undefined => {
-  if (!name) return undefined
-  const interfaceType = schema.getType(name)
+  if (!interfaceName) return undefined
+  const interfaceType = schema.getType(interfaceName)
   if (!interfaceType) return undefined
   const interfaceTypeSDL: string = printType(interfaceType)
   const fields = interfaceTypeSDL
@@ -38,11 +44,15 @@ const parseInterfaceFields = (
     ?.split('\n')
     .filter(Boolean)
     .map((e) => e.trim())
-    ?.join('\n  ')
+    ?.join('\n    ')
 
   if (!fields) return undefined
 
-  return { header: `implements ${name}`, fields }
+  const name = `${typeName}${interfaceName?.charAt(0).toUpperCase() || ''}${
+    interfaceName?.slice(1) || ''
+  }`
+
+  return { name, header: `implements ${interfaceName}`, fields }
 }
 
 export const createConnectionTypes = (
@@ -56,13 +66,31 @@ export const createConnectionTypes = (
         throw new Error(`${typeName}Edge already exists.`)
       if (!!objectTypes.hasOwnProperty(`${typeName}Connection`))
         throw new Error(`${typeName}Connection already exists.`)
+
+      const interfaceEdgeList =
+        args.edgeInterface?.map((interfaceName: string) =>
+          parseInterfaceFields(typeName, interfaceName, schema)
+        ) || []
+
+      const edgeUnionSDL = EdgeUnion(
+        typeName,
+        interfaceEdgeList
+          .map((value: any) => (value?.name ? `${value.name}Edge` : undefined))
+          .filter(Boolean)
+      )
+
+      const edgeListSDL = interfaceEdgeList.map((value: any) => {
+        return Edge(typeName, {
+          ...args,
+          ...(value || {}),
+        })
+      })
+
       return [
         ...acc,
-        Edge(typeName, {
-          ...args,
-          ...(parseInterfaceFields(args.edgeInterface, schema) || {}),
-        }),
-        Connection(typeName, args),
+        ...edgeListSDL,
+        edgeUnionSDL,
+        Connection(typeName, !!edgeUnionSDL, args),
       ]
     }, []),
   ].filter((node): node is string => !!node)
@@ -207,6 +235,7 @@ export default ({
     if (!connectionDirectiveType) return fieldConfig
 
     const typeName = fieldConfig.type?.toString()?.replace('!', 'NonNull')
+
     const targetType = schema.getType(`${typeName}Connection`)
     if (!typeName || !targetType) return fieldConfig
     fieldConfig.type = targetType
