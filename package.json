@@ -1,6 +1,6 @@
 {
   "name": "graphql-pagination-transform",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Transform fields into relay connections using a @connection directive",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
