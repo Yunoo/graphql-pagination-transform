@@ -16,6 +16,7 @@ export interface IGetSchemaDirectivesInput {
 }
 
 export interface IEdgeInterfaceFields {
+  name: string
   header: string
   fields: string
 }

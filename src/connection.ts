@@ -18,24 +18,32 @@ export const PageInfo = `
 
 export const Edge = (typeName: string, args: any) => {
   const cacheControl = composeCacheContolDirective(args)
-  const { edgeInterface, header, fields }: any = args
+  const { name, header, fields }: any = args
   return `
-  type ${typeName}Edge ${!!edgeInterface ? header : ''} {
+  type ${name || typeName}Edge ${header || ''} {
     cursor: String!
     node: ${typeName.replace('NonNull', '')}${
     args?.NonNull === true ? '!' : ''
   } ${cacheControl}
-    ${!!edgeInterface ? fields : ''}
+    ${fields || ''}
   }
 `
 }
 
-export const Connection = (typeName: string, args: any) => {
+export const EdgeUnion = (
+  typeName: string,
+  edgeNameList: Array<any>
+): String => {
+  if (edgeNameList.length < 2) return ''
+  return `union ${typeName}EdgeUnion = ${edgeNameList.join(' | ')}`
+}
+
+export const Connection = (typeName: string, union: boolean, args: any) => {
   const cacheControl = composeCacheContolDirective(args)
   return `
   type ${typeName}Connection ${cacheControl} {
     totalCount: Int!
-    edges: [${typeName}Edge] ${cacheControl}
+    edges: [${typeName}Edge${union ? 'Union' : ''}] ${cacheControl}
     pageInfo: PageInfo! ${cacheControl}
   }`
 }
@@ -50,30 +58,17 @@ const composeCacheContolDirective = (args: any) => {
 const checkEdgeInterfaceArgs = (
   typeName: string,
   objectTypes: IFoundObjectTypes,
-  connectionDirective: DirectiveAnnotation
+  connectionDirective: DirectiveAnnotation,
+  schema: GraphQLSchema
 ): void => {
   if (!objectTypes.hasOwnProperty(typeName)) return
-  const type = objectTypes[typeName]
-  const currentEdgeInterfaceName = (type.edgeInterface as string)?.trim()
   const directiveEdgeInterfaceName = (
     connectionDirective.args?.edgeInterface as string
   )?.trim()
 
-  if (
-    type.edgeInterface &&
-    connectionDirective.args?.edgeInterface &&
-    currentEdgeInterfaceName !== directiveEdgeInterfaceName
-  )
+  if (directiveEdgeInterfaceName && !schema.getType(directiveEdgeInterfaceName))
     throw new Error(
-      `A connection of the same node type ${typeName} cannot be edgeInterfaceed using different interfaces of "${currentEdgeInterfaceName}" and "${directiveEdgeInterfaceName}"`
-    )
-
-  if (
-    (!currentEdgeInterfaceName && directiveEdgeInterfaceName) ||
-    (currentEdgeInterfaceName && !directiveEdgeInterfaceName)
-  )
-    throw new Error(
-      'An interface name should be explicitly written in all connections of the same type'
+      `Missing '${directiveEdgeInterfaceName}' interface type (set in ${typeName} type connection directive). Did you forget to define it in the schema?`
     )
 }
 
@@ -115,22 +110,35 @@ export default (
         )
 
         if (!connectionDirective) return fieldConfig
+        checkEdgeInterfaceArgs(
+          typeName,
+          objectTypes,
+          connectionDirective,
+          schema
+        )
+
+        const edgeList = objectTypes[typeName]?.edgeInterface || []
+        const { edgeInterface } = connectionDirective?.args as any
+        if (!edgeList.includes(edgeInterface)) edgeList.push(edgeInterface)
+
+        // typeName = `${typeName}${args.NonNull ? 'NonNull' : ''}`
+
         if (!useCacheControl) {
           // Skip cacheContol directives
 
-          checkEdgeInterfaceArgs(typeName, objectTypes, connectionDirective)
-          objectTypes[typeName] = { ...args, ...connectionDirective.args }
+          objectTypes[typeName] = {
+            ...args,
+            edgeInterface: edgeList,
+          }
 
           return fieldConfig
         }
 
         if (useApolloInheritMaxAge) {
           // Rely on inheritMaxAge instead of calculating maxAge (Apollo v3+)
-
-          checkEdgeInterfaceArgs(typeName, objectTypes, connectionDirective)
           objectTypes[typeName] = {
             ...args,
-            ...connectionDirective.args,
+            edgeInterface: edgeList,
             useApolloInheritMaxAge,
           }
 
@@ -142,11 +150,10 @@ export default (
         )
 
         // Fallback to legacy cacheControl calculation (when inheritMaxAge is not supported)
-        checkEdgeInterfaceArgs(typeName, objectTypes, connectionDirective)
         const cacheControlArgs = cacheControlDirective?.args || {}
         objectTypes[typeName] = {
           ...args,
-          ...connectionDirective.args,
+          edgeInterface: edgeList,
           ...cacheControlArgs,
           maxAge:
             cacheControlArgs?.maxAge > objectTypes[typeName]?.maxAge
