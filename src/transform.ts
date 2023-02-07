@@ -90,7 +90,13 @@ export const createConnectionTypes = (
         ...acc,
         ...edgeListSDL,
         edgeUnionSDL,
-        Connection(typeName, !!edgeUnionSDL, args),
+        Connection(typeName, !!edgeUnionSDL, {
+          ...args,
+          name:
+            interfaceEdgeList.length === 1
+              ? interfaceEdgeList[0]?.name
+              : undefined,
+        }),
       ]
     }, []),
   ].filter((node): node is string => !!node)

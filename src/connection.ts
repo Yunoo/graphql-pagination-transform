@@ -43,7 +43,7 @@ export const Connection = (typeName: string, union: boolean, args: any) => {
   return `
   type ${typeName}Connection ${cacheControl} {
     totalCount: Int!
-    edges: [${typeName}Edge${union ? 'Union' : ''}] ${cacheControl}
+    edges: [${args.name || typeName}Edge${union ? 'Union' : ''}] ${cacheControl}
     pageInfo: PageInfo! ${cacheControl}
   }`
 }
