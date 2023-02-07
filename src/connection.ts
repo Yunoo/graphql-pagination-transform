@@ -30,20 +30,12 @@ export const Edge = (typeName: string, args: any) => {
 `
 }
 
-export const EdgeUnion = (
-  typeName: string,
-  edgeNameList: Array<any>
-): String => {
-  if (edgeNameList.length < 2) return ''
-  return `union ${typeName}EdgeUnion = ${edgeNameList.join(' | ')}`
-}
-
-export const Connection = (typeName: string, union: boolean, args: any) => {
+export const Connection = (typeName: string, args: any) => {
   const cacheControl = composeCacheContolDirective(args)
   return `
   type ${typeName}Connection ${cacheControl} {
     totalCount: Int!
-    edges: [${args.name || typeName}Edge${union ? 'Union' : ''}] ${cacheControl}
+    edges: [${typeName}Edge] ${cacheControl}
     pageInfo: PageInfo! ${cacheControl}
   }`
 }

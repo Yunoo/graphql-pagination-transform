@@ -16,18 +16,16 @@ import {
 import { makeExecutableSchema } from '@graphql-tools/schema'
 import { mergeTypeDefs } from '@graphql-tools/merge'
 
-import connectionDirective, {
-  Connection,
-  Edge,
-  EdgeUnion,
-  PageInfo,
-} from './connection'
+import connectionDirective, { Edge, Connection, PageInfo } from './connection'
 
 import {
   IFoundObjectTypes,
   IGetSchemaDirectivesInput,
   IEdgeInterfaceFields,
 } from './interfaces'
+
+const toUpper = (name?: string) =>
+  `${name?.charAt(0).toUpperCase() || ''}${name?.slice(1) || ''}`
 
 const parseInterfaceFields = (
   typeName: string,
@@ -47,11 +45,7 @@ const parseInterfaceFields = (
     ?.join('\n    ')
 
   if (!fields) return undefined
-
-  const name = `${typeName}${interfaceName?.charAt(0).toUpperCase() || ''}${
-    interfaceName?.slice(1) || ''
-  }`
-
+  const name = `${typeName}${toUpper(interfaceName)}`
   return { name, header: `implements ${interfaceName}`, fields }
 }
 
@@ -72,32 +66,27 @@ export const createConnectionTypes = (
           parseInterfaceFields(typeName, interfaceName, schema)
         ) || []
 
-      const edgeUnionSDL = EdgeUnion(
-        typeName,
-        interfaceEdgeList
-          .map((value: any) => (value?.name ? `${value.name}Edge` : undefined))
-          .filter(Boolean)
+      const EdgeConnectionSDL = interfaceEdgeList
+        .map((value: any) => {
+          const edge = Edge(typeName, {
+            ...args,
+            ...(value || {}),
+          })
+          const connection = Connection(value?.name || typeName, {
+            ...args,
+            ...(value || {}),
+          })
+
+          return { edge, connection }
+        })
+        .flat()
+
+      const edgeListSDL = EdgeConnectionSDL.map((value: any) => value.edge)
+      const connectionListSDL = EdgeConnectionSDL.map(
+        (value: any) => value.connection
       )
 
-      const edgeListSDL = interfaceEdgeList.map((value: any) => {
-        return Edge(typeName, {
-          ...args,
-          ...(value || {}),
-        })
-      })
-
-      return [
-        ...acc,
-        ...edgeListSDL,
-        edgeUnionSDL,
-        Connection(typeName, !!edgeUnionSDL, {
-          ...args,
-          name:
-            interfaceEdgeList.length === 1
-              ? interfaceEdgeList[0]?.name
-              : undefined,
-        }),
-      ]
+      return [...acc, ...edgeListSDL, ...connectionListSDL]
     }, []),
   ].filter((node): node is string => !!node)
 }
@@ -240,8 +229,11 @@ export default ({
 
     if (!connectionDirectiveType) return fieldConfig
 
-    const typeName = fieldConfig.type?.toString()?.replace('!', 'NonNull')
-
+    const typeName = `${fieldConfig.type
+      ?.toString()
+      ?.replace('!', 'NonNull')}${toUpper(
+      connectionDirectiveType?.edgeInterface
+    )}`
     const targetType = schema.getType(`${typeName}Connection`)
     if (!typeName || !targetType) return fieldConfig
     fieldConfig.type = targetType
